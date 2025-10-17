@@ -64,9 +64,8 @@ function handleClick(e){
         btn.action();
       }
     });
-  } else {
-    // click anywhere to return to menu from credits/controls/updates
-    if(gameState !== "playing") gameState = "menu";
+  } else if(gameState !== "playing") {
+    gameState = "menu"; // click anywhere to return
   }
 }
 
@@ -141,7 +140,7 @@ function draw() {
     // Title
     ctx.fillStyle = "white";
     ctx.font = "48px Arial";
-    ctx.fillText("Platform Shooter", 220, 100);
+    ctx.fillText("Platform Shooter", 180, 100);
 
     // Buttons
     buttons.forEach(btn => {
@@ -149,7 +148,7 @@ function draw() {
       ctx.fillRect(btn.x, btn.y, btn.width, btn.height);
       ctx.fillStyle = "white";
       ctx.font = "24px Arial";
-      ctx.fillText(btn.text, btn.x + 30, btn.y + 32);
+      ctx.fillText(btn.text, btn.x + 40, btn.y + 32);
     });
   } else if(gameState === "credits"){
     ctx.fillStyle = "#2c3e50";
@@ -185,7 +184,6 @@ function draw() {
     ctx.fillText("Click anywhere to return", 270, 400);
   } else if(gameState === "playing"){
     // Gameplay
-    // Background
     ctx.fillStyle = '#87ceeb';
     ctx.fillRect(0,0,canvas.width,canvas.height);
 
@@ -213,21 +211,15 @@ function draw() {
     ctx.fillStyle = 'yellow';
     bullets.forEach(b => ctx.fillRect(b.x - cameraX, b.y, 10, 4));
 
-    // Ammo UI bottom-right
-    const uiX = canvas.width - 160;
+    // Ammo/Mag UI bottom-right
+    const uiX = canvas.width - 150;
     const uiY = canvas.height - 40;
-
     ctx.fillStyle = 'rgba(0,0,0,0.5)';
-    ctx.fillRect(uiX, uiY, 150, 30);
+    ctx.fillRect(uiX, uiY, 140, 30);
 
     ctx.fillStyle = 'yellow';
-    for(let i=0;i<player.ammo;i++){
-      ctx.fillRect(uiX + 5 + i*9, uiY + 7, 7, 16);
-    }
-
-    ctx.fillStyle = 'white';
     ctx.font = '16px Arial';
-    ctx.fillText(`Mags: ${player.mags}`, uiX + 100, uiY + 20);
+    ctx.fillText(`Ammo: ${player.ammo} / Mags: ${player.mags}`, uiX + 10, uiY + 20);
   }
 }
 
