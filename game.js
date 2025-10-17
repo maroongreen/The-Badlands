@@ -133,7 +133,7 @@ function draw() {
 
     ctx.fillStyle = "white";
     ctx.font = "48px Arial";
-    ctx.fillText("Platform Shooter", 180, 100);
+    ctx.fillText("The Badlands", 180, 100);
 
     buttons.forEach(btn => {
       ctx.fillStyle = "#34495e";
