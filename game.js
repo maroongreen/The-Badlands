@@ -23,6 +23,10 @@ const gravity = 0.8;
 const bullets = [];
 const bulletSpeed = 12;
 
+// Shooting rate
+let shootCooldown = 0; // frames until next bullet can be fired
+const shootRate = 10;  // lower = faster fire rate
+
 // Level and scrolling
 let cameraX = 0;
 const levelWidth = 2000; // Level length
@@ -66,10 +70,11 @@ function update() {
   }
 
   // Shooting
-  if(keys[' '] && player.ammo > 0){
+  if(shootCooldown > 0) shootCooldown--;
+  if(keys[' '] && player.ammo > 0 && shootCooldown === 0){
     bullets.push({x: player.x + player.width, y: player.y + 20, vx: bulletSpeed});
     player.ammo--;
-    keys[' '] = false; // prevent auto-fire
+    shootCooldown = shootRate;
   }
 
   // Reload
@@ -77,7 +82,7 @@ function update() {
     const needed = 15 - player.ammo;
     player.ammo += needed;
     player.mags--;
-    keys['r'] = false;
+    keys['r'] = false; // prevent repeated reload
   }
 
   // Update bullets
