@@ -1,10 +1,22 @@
 const canvas = document.getElementById("gameCanvas");
 const ctx = canvas.getContext("2d");
 
+// Game state
+let gameState = "menu"; // "menu", "playing", "credits", "controls", "updates"
+
 // Controls
 const keys = {};
 document.addEventListener('keydown', e => keys[e.key] = true);
 document.addEventListener('keyup', e => keys[e.key] = false);
+canvas.addEventListener('click', handleClick);
+
+// Buttons
+const buttons = [
+  {text: "Play", x: 300, y: 150, width: 200, height: 50, action: () => gameState = "playing"},
+  {text: "Credits", x: 300, y: 220, width: 200, height: 50, action: () => gameState = "credits"},
+  {text: "Controls", x: 300, y: 290, width: 200, height: 50, action: () => gameState = "controls"},
+  {text: "Update Log", x: 300, y: 360, width: 200, height: 50, action: () => gameState = "updates"}
+];
 
 // Player
 const player = {
@@ -18,14 +30,12 @@ const player = {
   onGround: false,
   ammo: 15,
   mags: 7,
-  facing: 1 // 1 = right, -1 = left
+  facing: 1
 };
 
 const gravity = 0.8;
 const bullets = [];
 const bulletSpeed = 12;
-
-// Shooting rate
 let shootCooldown = 0;
 const shootRate = 20;
 
@@ -41,8 +51,29 @@ const platforms = [
   {x:1200, y:450, width:150, height:15}
 ];
 
+// Handle mouse click for menu buttons
+function handleClick(e){
+  const rect = canvas.getBoundingClientRect();
+  const mouseX = e.clientX - rect.left;
+  const mouseY = e.clientY - rect.top;
+
+  if(gameState === "menu"){
+    buttons.forEach(btn => {
+      if(mouseX >= btn.x && mouseX <= btn.x + btn.width &&
+         mouseY >= btn.y && mouseY <= btn.y + btn.height){
+        btn.action();
+      }
+    });
+  } else {
+    // click anywhere to return to menu from credits/controls/updates
+    if(gameState !== "playing") gameState = "menu";
+  }
+}
+
 // Update loop
 function update() {
+  if(gameState !== "playing") return;
+
   // Move player
   if(keys['ArrowLeft']){
     player.x -= 5;
@@ -53,17 +84,14 @@ function update() {
     player.facing = 1;
   }
 
-  // Jump
   if(keys['ArrowUp'] && player.onGround){
     player.vy = -15;
     player.onGround = false;
   }
 
-  // Gravity
   player.vy += gravity;
   player.y += player.vy;
 
-  // Platform collision
   player.onGround = false;
   for(let p of platforms){
     if(player.x + player.width > p.x &&
@@ -77,7 +105,6 @@ function update() {
     }
   }
 
-  // Shooting
   if(shootCooldown > 0) shootCooldown--;
   if(keys[' '] && player.ammo > 0 && shootCooldown === 0){
     bullets.push({x: player.x + player.width/2, y: player.y + 25, vx: bulletSpeed * player.facing});
@@ -85,7 +112,6 @@ function update() {
     shootCooldown = shootRate;
   }
 
-  // Reload
   if(keys['r'] && player.mags > 0 && player.ammo < 15){
     const needed = 15 - player.ammo;
     player.ammo += needed;
@@ -93,13 +119,11 @@ function update() {
     keys['r'] = false;
   }
 
-  // Update bullets
   for(let i=bullets.length-1;i>=0;i--){
     bullets[i].x += bullets[i].vx;
     if(bullets[i].x < cameraX || bullets[i].x > cameraX + canvas.width) bullets.splice(i,1);
   }
 
-  // Camera follows player
   cameraX = player.x - 200;
   if(cameraX < 0) cameraX = 0;
   if(cameraX + canvas.width > levelWidth) cameraX = levelWidth - canvas.width;
@@ -109,55 +133,102 @@ function update() {
 function draw() {
   ctx.clearRect(0,0,canvas.width,canvas.height);
 
-  // Background
-  ctx.fillStyle = '#87ceeb';
-  ctx.fillRect(0,0,canvas.width,canvas.height);
+  if(gameState === "menu"){
+    // Background
+    ctx.fillStyle = "#1abc9c";
+    ctx.fillRect(0,0,canvas.width,canvas.height);
 
-  // Platforms
-  ctx.fillStyle = '#654321';
-  platforms.forEach(p => ctx.fillRect(p.x - cameraX, p.y, p.width, p.height));
+    // Title
+    ctx.fillStyle = "white";
+    ctx.font = "48px Arial";
+    ctx.fillText("Platform Shooter", 220, 100);
 
-  // Player body
-  ctx.fillStyle = player.colorBody;
-  ctx.fillRect(player.x - cameraX, player.y + 10, player.width, player.height - 10);
+    // Buttons
+    buttons.forEach(btn => {
+      ctx.fillStyle = "#34495e";
+      ctx.fillRect(btn.x, btn.y, btn.width, btn.height);
+      ctx.fillStyle = "white";
+      ctx.font = "24px Arial";
+      ctx.fillText(btn.text, btn.x + 30, btn.y + 32);
+    });
+  } else if(gameState === "credits"){
+    ctx.fillStyle = "#2c3e50";
+    ctx.fillRect(0,0,canvas.width,canvas.height);
+    ctx.fillStyle = "white";
+    ctx.font = "28px Arial";
+    ctx.fillText("Credits", 350, 100);
+    ctx.font = "20px Arial";
+    ctx.fillText("Made by: YourNameHere", 300, 200);
+    ctx.fillText("Click anywhere to return", 270, 400);
+  } else if(gameState === "controls"){
+    ctx.fillStyle = "#2c3e50";
+    ctx.fillRect(0,0,canvas.width,canvas.height);
+    ctx.fillStyle = "white";
+    ctx.font = "28px Arial";
+    ctx.fillText("Controls", 350, 100);
+    ctx.font = "20px Arial";
+    ctx.fillText("Arrow Left/Right: Move", 280, 200);
+    ctx.fillText("Arrow Up: Jump", 280, 240);
+    ctx.fillText("Space: Shoot", 280, 280);
+    ctx.fillText("R: Reload", 280, 320);
+    ctx.fillText("Click anywhere to return", 270, 400);
+  } else if(gameState === "updates"){
+    ctx.fillStyle = "#2c3e50";
+    ctx.fillRect(0,0,canvas.width,canvas.height);
+    ctx.fillStyle = "white";
+    ctx.font = "28px Arial";
+    ctx.fillText("Update Log", 330, 100);
+    ctx.font = "20px Arial";
+    ctx.fillText("v0.1 - Basic player, gun, and platforms", 220, 200);
+    ctx.fillText("v0.2 - Ammo UI, smoother shooting", 220, 240);
+    ctx.fillText("v0.3 - Better player/gun visuals", 220, 280);
+    ctx.fillText("Click anywhere to return", 270, 400);
+  } else if(gameState === "playing"){
+    // Gameplay
+    // Background
+    ctx.fillStyle = '#87ceeb';
+    ctx.fillRect(0,0,canvas.width,canvas.height);
 
-  // Player head
-  ctx.fillStyle = player.colorHead;
-  ctx.fillRect(player.x - cameraX + 5, player.y, player.width - 10, 10);
+    // Platforms
+    ctx.fillStyle = '#654321';
+    platforms.forEach(p => ctx.fillRect(p.x - cameraX, p.y, p.width, p.height));
 
-  // Gun
-  ctx.fillStyle = 'black';
-  if(player.facing === 1){
-    // Barrel
-    ctx.fillRect(player.x - cameraX + player.width, player.y + 20, 20, 5);
-    // Handle
-    ctx.fillRect(player.x - cameraX + player.width + 10, player.y + 23, 5, 10);
-  } else {
-    ctx.fillRect(player.x - cameraX - 20, player.y + 20, 20, 5);
-    ctx.fillRect(player.x - cameraX - 15, player.y + 23, 5, 10);
+    // Player body & head
+    ctx.fillStyle = player.colorBody;
+    ctx.fillRect(player.x - cameraX, player.y + 10, player.width, player.height - 10);
+    ctx.fillStyle = player.colorHead;
+    ctx.fillRect(player.x - cameraX + 5, player.y, player.width - 10, 10);
+
+    // Gun
+    ctx.fillStyle = 'black';
+    if(player.facing === 1){
+      ctx.fillRect(player.x - cameraX + player.width, player.y + 20, 20, 5);
+      ctx.fillRect(player.x - cameraX + player.width + 10, player.y + 23, 5, 10);
+    } else {
+      ctx.fillRect(player.x - cameraX - 20, player.y + 20, 20, 5);
+      ctx.fillRect(player.x - cameraX - 15, player.y + 23, 5, 10);
+    }
+
+    // Bullets
+    ctx.fillStyle = 'yellow';
+    bullets.forEach(b => ctx.fillRect(b.x - cameraX, b.y, 10, 4));
+
+    // Ammo UI bottom-right
+    const uiX = canvas.width - 160;
+    const uiY = canvas.height - 40;
+
+    ctx.fillStyle = 'rgba(0,0,0,0.5)';
+    ctx.fillRect(uiX, uiY, 150, 30);
+
+    ctx.fillStyle = 'yellow';
+    for(let i=0;i<player.ammo;i++){
+      ctx.fillRect(uiX + 5 + i*9, uiY + 7, 7, 16);
+    }
+
+    ctx.fillStyle = 'white';
+    ctx.font = '16px Arial';
+    ctx.fillText(`Mags: ${player.mags}`, uiX + 100, uiY + 20);
   }
-
-  // Bullets
-  ctx.fillStyle = 'yellow';
-  bullets.forEach(b => ctx.fillRect(b.x - cameraX, b.y, 10, 4));
-
-  // Ammo UI bottom-right
-  const uiX = canvas.width - 160;
-  const uiY = canvas.height - 40;
-
-  ctx.fillStyle = 'rgba(0,0,0,0.5)';
-  ctx.fillRect(uiX, uiY, 150, 30);
-
-  // Bullets dots
-  ctx.fillStyle = 'yellow';
-  for(let i=0;i<player.ammo;i++){
-    ctx.fillRect(uiX + 5 + i*9, uiY + 7, 7, 16);
-  }
-
-  // Mags
-  ctx.fillStyle = 'white';
-  ctx.font = '16px Arial';
-  ctx.fillText(`Mags: ${player.mags}`, uiX + 100, uiY + 20);
 }
 
 // Game loop
