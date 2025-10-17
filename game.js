@@ -158,7 +158,7 @@ function draw() {
 
     ctx.font = "20px Arial";
     if(gameState === "credits"){
-      ctx.fillText("Made by: YourNameHere", 300, 200);
+      ctx.fillText("Made by: Maroonstykl (General_brock14153 / mrmythrl)", 300, 200);
     } else if(gameState === "controls"){
       ctx.fillText("Arrow Left/Right: Move", 280, 200);
       ctx.fillText("Arrow Up: Jump", 280, 240);
