@@ -1,7 +1,7 @@
 const canvas = document.getElementById("gameCanvas");
 const ctx = canvas.getContext("2d");
 
-// Game state
+// Game state // sigma
 let gameState = "menu"; // "menu", "playing", "credits", "controls", "updates"
 
 // Controls
