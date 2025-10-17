@@ -1,11 +1,12 @@
 body {
   margin: 0;
   overflow: hidden;
-  background: #1d1d1d;
+  background: #87ceeb; /* sky */
+  font-family: Arial, sans-serif;
 }
 
 canvas {
   display: block;
   margin: auto;
-  background: #222;
+  background: #87ceeb;
 }
