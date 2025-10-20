@@ -37,7 +37,7 @@ const gravity = 0.8;
 const bullets = [];
 const bulletSpeed = 12;
 let shootCooldown = 0;
-const shootRate = 20;
+const shootRate = 25; // slower rate
 
 // Level and scrolling
 let cameraX = 0;
@@ -65,7 +65,7 @@ function handleClick(e){
       }
     });
   } else if(gameState !== "playing"){
-    gameState = "menu"; // return to menu from other screens
+    gameState = "menu"; // return to menu
   }
 }
 
@@ -104,8 +104,7 @@ function update() {
 
   // Reload
   if(keys['r'] && player.mags > 0 && player.ammo < 15){
-    const needed = 15 - player.ammo;
-    player.ammo += needed;
+    player.ammo = 15;
     player.mags--;
     keys['r'] = false;
   }
@@ -128,21 +127,23 @@ function draw() {
 
   // --- MAIN MENU ---
   if(gameState === "menu"){
-    ctx.fillStyle = "#1abc9c";
+    ctx.fillStyle = "#1a1a1a";
     ctx.fillRect(0,0,canvas.width,canvas.height);
 
-    ctx.fillStyle = "white";
-    ctx.font = "48px Arial";
-    ctx.fillText("The Badlands", 180, 100);
+    ctx.fillStyle = "#e67e22";
+    ctx.font = "64px Impact";
+    ctx.textAlign = "center";
+    ctx.fillText("THE BADLANDS", canvas.width/2, 100);
 
     buttons.forEach(btn => {
       ctx.fillStyle = "#34495e";
       ctx.fillRect(btn.x, btn.y, btn.width, btn.height);
       ctx.fillStyle = "white";
       ctx.font = "24px Arial";
-      ctx.fillText(btn.text, btn.x + 40, btn.y + 32);
+      ctx.textAlign = "left";
+      ctx.fillText(btn.text, btn.x + 60, btn.y + 32);
     });
-    return; // stop here, don’t draw game
+    return;
   }
 
   // --- CREDITS / CONTROLS / UPDATES ---
@@ -150,26 +151,29 @@ function draw() {
     ctx.fillStyle = "#2c3e50";
     ctx.fillRect(0,0,canvas.width,canvas.height);
     ctx.fillStyle = "white";
-    ctx.font = "28px Arial";
+    ctx.textAlign = "center";
+    ctx.font = "48px Impact";
 
-    if(gameState === "credits") ctx.fillText("Credits", 350, 100);
-    else if(gameState === "controls") ctx.fillText("Controls", 350, 100);
-    else ctx.fillText("Update Log", 330, 100);
+    if(gameState === "credits") ctx.fillText("CREDITS", canvas.width/2, 100);
+    else if(gameState === "controls") ctx.fillText("CONTROLS", canvas.width/2, 100);
+    else ctx.fillText("UPDATE LOG", canvas.width/2, 100);
 
-    ctx.font = "20px Arial";
+    ctx.font = "22px Arial";
     if(gameState === "credits"){
-      ctx.fillText("Made by: Maroonstykl (General_brock14153 / mrmythrl)", 300, 200);
+      ctx.fillText("Made by: Maroonstykl (General_brock14153 / mrmythrl)", canvas.width/2, 250);
     } else if(gameState === "controls"){
-      ctx.fillText("Arrow Left/Right: Move", 280, 200);
-      ctx.fillText("Arrow Up: Jump", 280, 240);
-      ctx.fillText("Space: Shoot", 280, 280);
-      ctx.fillText("R: Reload", 280, 320);
+      ctx.fillText("← →  Move", canvas.width/2, 200);
+      ctx.fillText("↑  Jump", canvas.width/2, 240);
+      ctx.fillText("Space  Shoot", canvas.width/2, 280);
+      ctx.fillText("R  Reload", canvas.width/2, 320);
     } else if(gameState === "updates"){
-      ctx.fillText("v0.1 - Basic player, gun, platforms", 220, 200);
-      ctx.fillText("v0.2 - Ammo UI, smoother shooting", 220, 240);
-      ctx.fillText("v0.3 - Better visuals", 220, 280);
+      ctx.fillText("v0.1  - Basic player, gun, platforms", canvas.width/2, 200);
+      ctx.fillText("v0.2  - Ammo UI, smoother shooting", canvas.width/2, 240);
+      ctx.fillText("v0.3  - Menu + Credits", canvas.width/2, 280);
     }
-    ctx.fillText("Click anywhere to return", 270, 400);
+
+    ctx.fillText("Click anywhere to return", canvas.width/2, 420);
+    ctx.textAlign = "left";
     return;
   }
 
@@ -191,27 +195,22 @@ function draw() {
   ctx.fillStyle = 'black';
   if(player.facing === 1){
     ctx.fillRect(player.x - cameraX + player.width, player.y + 20, 20, 5);
-    ctx.fillRect(player.x - cameraX + player.width + 10, player.y + 23, 5, 10);
   } else {
     ctx.fillRect(player.x - cameraX - 20, player.y + 20, 20, 5);
-    ctx.fillRect(player.x - cameraX - 15, player.y + 23, 5, 10);
   }
 
   // Bullets
   ctx.fillStyle = 'yellow';
   bullets.forEach(b => ctx.fillRect(b.x - cameraX, b.y, 10, 4));
 
-  // --- Ammo/Mags UI ---
-  const uiX = canvas.width - 160;
-  const uiY = canvas.height - 40;
-  ctx.fillStyle = 'rgba(0,0,0,0.5)';
-  ctx.fillRect(uiX, uiY, 150, 30);
-
-  ctx.fillStyle = 'yellow';
+  // --- Ammo UI ---
+  const uiX = canvas.width - 150;
+  const uiY = canvas.height - 20;
+  ctx.fillStyle = 'white';
   ctx.font = '16px Arial';
-  let ammoSymbols = 'Ammo'.repeat(player.ammo);
-  let magsSymbols = 'Mags'.repeat(player.mags);
-  ctx.fillText(`Ammo: ${ammoSymbols} / Mags: ${magsSymbols}`, uiX + 5, uiY + 20);
+  ctx.textAlign = "right";
+  ctx.fillText(`Ammo: ${player.ammo} | Mags: ${player.mags}`, uiX, uiY);
+  ctx.textAlign = "left";
 }
 
 // Game loop
