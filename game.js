@@ -1,10 +1,8 @@
-/* The Badlands — game.js (v0.4)
-   - scenery (mountains, clouds)
-   - soldier bots (AI melee)
-   - ammo crates (press E to pick up)
-   - health system + fancy Game Over
-   - reload = 4 seconds
-   - extended level width (4000)
+/* The Badlands — game.js (v0.4 + key unlock)
+   - All gameplay features from v0.4 (scenery, enemies, crates, reload, gameover)
+   - Adds a client-side key unlock system (localStorage)
+   - Use "Enter Key" in the menu to paste a key and unlock.
+   NOTE: This is only a cosmetic/local unlock (not secure).
 */
 
 // -------------------- canvas setup --------------------
@@ -16,20 +14,44 @@ let gameState = "menu"; // menu, playing, credits, controls, updates, gameover
 let fadeAlpha = 0; // for game over
 let showRetry = false;
 
+// -------------------- KEY UNLOCK (client-side demo) --------------------
+// checksum: same algorithm used by the demo shop
+function checksum(str){
+  let sum = 0;
+  for(let i=0;i<str.length;i++) sum += str.charCodeAt(i);
+  return (sum % 1000).toString(36).toUpperCase();
+}
+function validateKey(key){
+  if(!key || typeof key !== 'string') return false;
+  key = key.trim().toUpperCase();
+  const parts = key.split('-');
+  if(parts.length !== 2) return false;
+  return checksum(parts[0]) === parts[1];
+}
+function tryKeySubmit(key){
+  if(validateKey(key)){
+    localStorage.setItem('badlands_unlocked','1');
+    unlocked = true;
+    alert('Key valid — game unlocked!');
+    return true;
+  } else {
+    alert('Key invalid.');
+    return false;
+  }
+}
+let unlocked = localStorage.getItem('badlands_unlocked') === '1';
+
 // -------------------- input --------------------
 const keys = {};
-document.addEventListener("keydown", e => {
-  if (!keys[e.key]) keys[e.key] = true;
-});
-document.addEventListener("keyup", e => {
-  keys[e.key] = false;
-});
+document.addEventListener("keydown", e => { if(!keys[e.key]) keys[e.key] = true; });
+document.addEventListener("keyup", e => { keys[e.key] = false; });
 canvas.addEventListener("click", handleClick);
 
 // Prevent continuous triggers for single-press actions
 const inputEdge = {
   wantReload: false,
-  wantInteract: false
+  wantInteract: false,
+  justDidInteract: false
 };
 
 // -------------------- player --------------------
@@ -124,11 +146,27 @@ const crates = [
 ];
 
 // -------------------- UI / menu buttons --------------------
+// menu buttons: Play (requires unlock), Enter Key, Credits, Controls, Update Log
 const buttons = [
-  { text: "Play", x: 300, y: 150, width: 200, height: 50, action: () => startNewGame() },
-  { text: "Credits", x: 300, y: 220, width: 200, height: 50, action: () => (gameState = "credits") },
-  { text: "Controls", x: 300, y: 290, width: 200, height: 50, action: () => (gameState = "controls") },
-  { text: "Update Log", x: 300, y: 360, width: 200, height: 50, action: () => (gameState = "updates") }
+  { text: "Play", x: 300, y: 140, width: 200, height: 50, action: () => {
+      if(unlocked) startNewGame();
+      else {
+        const doPrompt = confirm("Game is locked. Press OK to enter a key, or Cancel to return to menu.");
+        if(doPrompt){
+          const k = prompt("Enter your game key:");
+          if(k) tryKeySubmit(k);
+        }
+      }
+    }
+  },
+  { text: "Enter Key", x: 300, y: 210, width: 200, height: 44, action: () => {
+      const k = prompt("Paste your game key:");
+      if(k) tryKeySubmit(k);
+    }
+  },
+  { text: "Credits", x: 300, y: 270, width: 200, height: 44, action: () => (gameState = "credits") },
+  { text: "Controls", x: 300, y: 330, width: 200, height: 44, action: () => (gameState = "controls") },
+  { text: "Update Log", x: 300, y: 390, width: 200, height: 44, action: () => (gameState = "updates") }
 ];
 
 function startNewGame() {
@@ -241,11 +279,7 @@ function update() {
       shootCooldown = shootRate;
     }
 
-    // reload (edge triggered)
-    if (inputEdge.wantReload && !keys["r"]) {
-      // R was pressed then released -> do nothing (only trigger on press)
-      inputEdge.wantReload = false;
-    }
+    // reload: start on key press (press R to begin)
     if (keys["r"] && !player.isReloading && player.mags > 0 && player.ammo < 15) {
       player.isReloading = true;
       player.reloadTimer = reloadTimeFrames;
@@ -264,14 +298,13 @@ function update() {
     }
 
     // interact (press E)
-    if (inputEdge.wantInteract && !keys["e"]) inputEdge.wantInteract = false; // reset when released
     if (keys["e"]) {
-      // only trigger once per key press using a small guard: check and then wait for release
+      // only trigger once per press using guard
       if (!inputEdge.justDidInteract) {
         inputEdge.justDidInteract = true;
         // find nearby crate
         for (let c of crates) {
-          if (!c.taken && Math.abs((c.x + c.w / 2) - (player.x + player.width / 2)) < 40 && Math.abs(c.y - player.y) < 40) {
+          if (!c.taken && Math.abs((c.x + c.w / 2) - (player.x + player.width / 2)) < 40 && Math.abs(c.y - player.y) < 50) {
             c.taken = true;
             player.mags = Math.min(player.mags + 1, 99); // cap mags
             break;
@@ -282,7 +315,7 @@ function update() {
       inputEdge.justDidInteract = false;
     }
 
-    // bullets update
+    // bullets update & collisions
     for (let i = bullets.length - 1; i >= 0; i--) {
       bullets[i].x += bullets[i].vx;
       // bullet collision with enemies
@@ -301,7 +334,7 @@ function update() {
           break;
         }
       }
-      // remove offscreen
+      // remove offscreen (safety)
       if (i < bullets.length && (bullets[i].x < cameraX - 50 || bullets[i].x > cameraX + canvas.width + 50)) {
         bullets.splice(i, 1);
       }
@@ -314,23 +347,19 @@ function update() {
       en.y = 420; // ground y for soldiers (simple)
       const dx = player.x - en.x;
       const dist = Math.abs(dx);
-      // if too far left/right, move toward player
       if (dist > en.attackRange) {
         en.vx = Math.sign(dx) * en.speed;
         en.x += en.vx;
       } else {
-        // in attack range
         en.vx = 0;
         if (en.attackCooldown <= 0) {
-          // attack: reduce player hp a bit
           player.hp -= 1;
-          en.attackCooldown = 60; // 1 second cooldown
+          en.attackCooldown = 60; // 1s cooldown
         }
       }
       if (en.attackCooldown > 0) en.attackCooldown--;
     }
 
-    // check enemy collisions (touching deals small damage already handled when in range)
     // death condition
     if (player.hp <= 0) {
       player.hp = 0;
@@ -347,20 +376,19 @@ function update() {
     return;
   }
 
-  // menu/other states: nothing heavy to update
+  // other states: nothing to update
 }
 
 // -------------------- draw --------------------
 function draw() {
   ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-  // draw menus
+  // --- MENU ---
   if (gameState === "menu") {
-    // dark desert theme
     ctx.fillStyle = "#0f0f10";
     ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-    // title
+    // Title
     ctx.fillStyle = "#f39c12";
     ctx.font = "64px Impact";
     ctx.textAlign = "center";
@@ -368,8 +396,8 @@ function draw() {
 
     // subtitle
     ctx.fillStyle = "#bdc3c7";
-    ctx.font = "18px Arial";
-    ctx.fillText("v0.4 — The Badlands", canvas.width / 2, 130);
+    ctx.font = "16px Arial";
+    ctx.fillText("v0.4 — The Badlands (Demo)", canvas.width / 2, 130);
 
     // buttons
     buttons.forEach(btn => {
@@ -381,15 +409,21 @@ function draw() {
       ctx.fillText(btn.text, btn.x + 60, btn.y + 33);
     });
 
-    // small footer
+    // unlocked status
     ctx.textAlign = "center";
+    ctx.fillStyle = unlocked ? "#2ecc71" : "#e74c3c";
+    ctx.font = "18px Arial";
+    ctx.fillText(unlocked ? "UNLOCKED" : "LOCKED - Enter Key to Play", canvas.width / 2, 220);
+
+    // footer credits
     ctx.fillStyle = "#95a5a6";
     ctx.font = "14px Arial";
     ctx.fillText("Made by: Maroonstykl (General_brock14153 / mrmythrl)", canvas.width / 2, canvas.height - 30);
+    ctx.textAlign = "left";
     return;
   }
 
-  // credits / controls / updates
+  // --- CREDITS / CONTROLS / UPDATES ---
   if (gameState === "credits" || gameState === "controls" || gameState === "updates") {
     ctx.fillStyle = "#13202a";
     ctx.fillRect(0, 0, canvas.width, canvas.height);
@@ -412,11 +446,11 @@ function draw() {
       ctx.fillText("v0.2 - Ammo and shooting", canvas.width / 2, 280);
     }
     ctx.fillText("Click anywhere to return", canvas.width / 2, canvas.height - 60);
+    ctx.textAlign = "left";
     return;
   }
 
-  // gameplay draw:
-
+  // --- GAMEPLAY DRAW ---
   // sky gradient
   const grad = ctx.createLinearGradient(0, 0, 0, canvas.height);
   grad.addColorStop(0, "#87ceeb");
@@ -424,10 +458,9 @@ function draw() {
   ctx.fillStyle = grad;
   ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-  // mountains (parallax slower than camera)
+  // mountains (parallax)
   mountains.forEach((m, i) => {
     ctx.fillStyle = m.color;
-    // draw a simple triangle pattern
     const step = 300;
     for (let sx = -cameraX * (0.2 + i * 0.1); sx < canvas.width + 400; sx += step) {
       ctx.beginPath();
@@ -439,15 +472,13 @@ function draw() {
     }
   });
 
-  // clouds (parallax)
+  // clouds
   clouds.forEach(c => {
     const cx = c.x - cameraX * 0.3;
-    // simple cloud shape
     ctx.fillStyle = "rgba(255,255,255,0.9)";
     ctx.beginPath();
     ctx.ellipse(cx, c.y, c.size * 0.9, c.size * 0.55, 0, 0, Math.PI * 2);
     ctx.fill();
-    // move cloud
     c.x += c.speed;
     if (c.x - cameraX > levelWidth + 200) c.x = -200 + Math.random() * 100;
   });
@@ -456,26 +487,22 @@ function draw() {
   ctx.fillStyle = "#654321";
   platforms.forEach(p => ctx.fillRect(p.x - cameraX, p.y, p.width, p.height));
 
-  // crates draw
+  // crates
   crates.forEach(c => {
     if (c.taken) return;
     const cx = c.x - cameraX;
-    // metal box look
     ctx.fillStyle = "#9aa0a6";
     ctx.fillRect(cx, c.y, c.w, c.h);
     ctx.strokeStyle = "#6b6f73";
     ctx.strokeRect(cx, c.y, c.w, c.h);
-    // small plus mark
     ctx.fillStyle = "#2c3e50";
     ctx.fillRect(cx + 10, c.y + 6, 8, 2);
     ctx.fillRect(cx + 13, c.y + 3, 2, 8);
-    // "Press E" hint if near
     const dist = Math.abs((c.x + c.w / 2) - (player.x + player.width / 2));
     if (!c.taken && dist < 60 && Math.abs(c.y - player.y) < 50) {
       ctx.fillStyle = "white";
       ctx.font = "12px Arial";
       ctx.fillText("Press E to pick mag", cx - 10, c.y - 8);
-      // pick-up handled in update when E pressed
     }
   });
 
@@ -483,28 +510,20 @@ function draw() {
   ctx.fillStyle = "yellow";
   bullets.forEach(b => ctx.fillRect(b.x - cameraX, b.y, 10, 4));
 
-  // enemies draw
+  // enemies
   enemies.forEach(en => {
     if (!en.alive) return;
     const ex = en.x - cameraX;
     const ey = en.y;
-    // soldier body (boxy)
     ctx.fillStyle = "#2d3436";
     ctx.fillRect(ex, ey, en.width, en.height);
-    // helmet / head
     ctx.fillStyle = "#b2bec3";
     ctx.fillRect(ex + 4, ey - 10, en.width - 8, 8);
-    // face visor
     ctx.fillStyle = "#2d3436";
     ctx.fillRect(ex + 6, ey - 8, en.width - 12, 4);
-    // simple gun sprite pointing toward player
     ctx.fillStyle = "#1b1b1b";
-    if (en.x < player.x) {
-      ctx.fillRect(ex + en.width, ey + 18, 14, 4);
-    } else {
-      ctx.fillRect(ex - 14, ey + 18, 14, 4);
-    }
-    // HP bar small
+    if (en.x < player.x) ctx.fillRect(ex + en.width, ey + 18, 14, 4);
+    else ctx.fillRect(ex - 14, ey + 18, 14, 4);
     const hpW = (en.hp / 3) * en.width;
     ctx.fillStyle = "red";
     ctx.fillRect(ex, ey - 8, hpW, 4);
@@ -512,31 +531,30 @@ function draw() {
     ctx.strokeRect(ex, ey - 8, en.width, 4);
   });
 
-  // player draw (body/head)
+  // player draw
   ctx.fillStyle = player.colorBody;
   ctx.fillRect(player.x - cameraX, player.y + 10, player.width, player.height - 10);
   ctx.fillStyle = player.colorHead;
   ctx.fillRect(player.x - cameraX + 5, player.y, player.width - 10, 10);
 
-  // gun (flip with facing)
+  // gun
   ctx.fillStyle = "#111";
   if (player.facing === 1) {
-    ctx.fillRect(player.x - cameraX + player.width, player.y + 20, 22, 6); // barrel
-    ctx.fillRect(player.x - cameraX + player.width + 12, player.y + 26, 6, 10); // handle
+    ctx.fillRect(player.x - cameraX + player.width, player.y + 20, 22, 6);
+    ctx.fillRect(player.x - cameraX + player.width + 12, player.y + 26, 6, 10);
   } else {
     ctx.fillRect(player.x - cameraX - 22, player.y + 20, 22, 6);
     ctx.fillRect(player.x - cameraX - 18, player.y + 26, 6, 10);
   }
 
-  // player muzzle flash when shooting (brief effect)
-  // (simple: if shootCooldown recently set high, we can flash)
+  // muzzle flash
   if (shootCooldown > shootRate - 4 && bullets.length > 0) {
     ctx.fillStyle = "rgba(255,215,0,0.9)";
     if (player.facing === 1) ctx.fillRect(player.x - cameraX + player.width + 22, player.y + 16, 12, 12);
     else ctx.fillRect(player.x - cameraX - 34, player.y + 16, 12, 12);
   }
 
-  // health bar (top-left)
+  // health bar
   const hpX = 20;
   const hpY = 20;
   const hpW = 160;
@@ -550,15 +568,13 @@ function draw() {
   ctx.font = "14px Arial";
   ctx.fillText(`HP: ${player.hp} / ${player.maxHp}`, hpX + hpW + 10, hpY + 14);
 
-  // ammo / mags UI bottom-right numeric (clean)
-  const uiX = canvas.width - 20;
-  const uiY = canvas.height - 20;
+  // ammo UI numeric (bottom-right)
   ctx.fillStyle = "rgba(0,0,0,0.5)";
   ctx.fillRect(canvas.width - 200, canvas.height - 40, 180, 32);
   ctx.fillStyle = "white";
   ctx.font = "16px Arial";
   ctx.textAlign = "right";
-  ctx.fillText(`Ammo: ${player.ammo}   |   Mags: ${player.mags}`, uiX - 10, uiY);
+  ctx.fillText(`Ammo: ${player.ammo}   |   Mags: ${player.mags}`, canvas.width - 20, canvas.height - 20);
   ctx.textAlign = "left";
 
   // reload indicator
@@ -571,7 +587,7 @@ function draw() {
     ctx.fillText("Reloading...", canvas.width - 180, canvas.height - 22);
   }
 
-  // small debug / objective hint
+  // hint
   ctx.fillStyle = "#ffffffcc";
   ctx.font = "12px Arial";
   ctx.fillText("Press E to interact with crates. Press R to reload.", 20, canvas.height - 10);
@@ -579,25 +595,20 @@ function draw() {
 
 // -------------------- game over draw --------------------
 function drawGameOver() {
-  // draw faded scene behind (call draw at gameplay before fade)
-  // overlay fade
   fadeAlpha += 0.01;
   if (fadeAlpha > 1) fadeAlpha = 1;
   ctx.fillStyle = `rgba(0,0,0,${fadeAlpha})`;
   ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-  // "You Died" big text
   ctx.fillStyle = "#ee4b2b";
   ctx.font = "64px Impact";
   ctx.textAlign = "center";
   ctx.fillText("YOU DIED", canvas.width / 2, canvas.height / 2 - 20);
 
-  // small message
   ctx.fillStyle = "white";
   ctx.font = "20px Arial";
   ctx.fillText("The Badlands claim another soul...", canvas.width / 2, canvas.height / 2 + 10);
 
-  // retry button after fade progressed
   if (fadeAlpha >= 1) {
     showRetry = true;
     const rx = canvas.width / 2 - 80;
@@ -614,8 +625,6 @@ function drawGameOver() {
 function loop() {
   update();
   if (gameState === "gameover") {
-    // to show the scene beneath, draw the gameplay once (player died in update)
-    // we draw a normal gameplay frame first (camera etc), then overlay game over
     draw();
     drawGameOver();
   } else {
@@ -626,17 +635,3 @@ function loop() {
 
 // -------------------- start --------------------
 loop();
-
-// -------------------- NOTES --------------------
-/*
-- Enemy behavior: soldiers move toward the player and attack when close. They take 3 hits to die.
-- Ammo crates: press E near a crate to pick up +1 mag. Crate disappears (set taken).
-- Reload: press R to start reload (4 seconds). While reloading you can't shoot.
-- Game Over shows fade and Retry button.
-- All gameplay runs at approx 60fps; timing uses frames for reload and cooldowns.
-- Tweak values:
-    * player speed: change 4.5
-    * enemy speed: change en.speed
-    * reload time: reloadTimeFrames (frames)
-    * shoot rate: shootRate
-*/
