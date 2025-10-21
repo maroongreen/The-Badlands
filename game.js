@@ -4,6 +4,7 @@
    - Enemies only attack when vertically near or after successful parkour
    - Ammo crates, E interaction, reloading (4s), health, gameover
    - Client-side key unlock integrated
+   - NEW: "Buy Game Keys" button in main menu opens external shop URL
 */
 
 // ---------- Canvas ----------
@@ -32,7 +33,7 @@ canvas.addEventListener('click', onClick);
 
 // ---------- Helpers ----------
 function clamp(v,min,max){ return Math.max(min,Math.min(max,v)); }
-function rectsOverlap(a,b){ return !(a.x + a.width < b.x || a.x > (b.x + (b.w || b.width)) || a.y + a.height < b.y || a.y > (b.y + (b.h || b.height))); }
+function rectsOverlap(a,b){ return !(a.x + a.width < b.x || a.x > b.x + (b.w || b.width) || a.y + a.height < b.y || a.y > b.y + (b.h || b.height)); }
 
 // ---------- Key unlock (same algorithm as shop) ----------
 function checksum(str){
@@ -122,8 +123,14 @@ const shootRate = 30;
 const bulletSpeed = 10;
 
 // ---------- Menu Buttons (positions) ----------
+// Added new "Buy Game Keys" button which opens the shop URL in a new tab
 const menuButtons = [
-  {text:'Play', x:300,y:140,w:200,h:50, action: ()=> {
+  {text:'Buy Game Keys', x:300, y:100, w:200, h:36, action: ()=> {
+      // open external shop page
+      window.open('https://maroongreen.github.io/Badlands-Key-Shop/', '_blank', 'noopener');
+    }
+  },
+  {text:'Play', x:300,y:150,w:200,h:50, action: ()=> {
     if(unlocked) startNewGame();
     else {
       const ok = confirm('Game is locked. Enter key now?');
@@ -182,28 +189,22 @@ function findPlatformUnder(x, y){
   }
   return -1;
 }
-// can enemy jump from px->target p? returns boolean
 function canEnemyJumpFromTo(enemy, fromPlatformIdx, toPlatformIdx){
   if(fromPlatformIdx < 0 || toPlatformIdx < 0) return false;
   const from = platforms[fromPlatformIdx];
   const to = platforms[toPlatformIdx];
-  // horizontal and vertical differences
   const dx = (to.x + to.width/2) - (from.x + from.width/2 || from.x + from.width/2);
   const dy = to.y - from.y;
-  // enemy jump capability tuned: horizontal within 220, up to 140 vertical
-  return Math.abs(dx) < 240 && dy > -150; // allow jumping up if dy > -150 (target not too high)
+  return Math.abs(dx) < 240 && dy > -150;
 }
 
 // ---------- Update ----------
 function update(){
-  // global input edge guards (not needed for everything now)
   if(gameState === 'playing'){
-    // movement
     if(keys['ArrowLeft']) { player.x -= PLAYER_SPEED; player.facing = -1; }
     if(keys['ArrowRight']) { player.x += PLAYER_SPEED; player.facing = 1; }
     if(keys['ArrowUp'] && player.onGround) { player.vy = PLAYER_JUMP; player.onGround=false; }
 
-    // gravity & apply
     player.vy += GRAVITY; player.y += player.vy;
 
     // platform collision for player
@@ -217,7 +218,6 @@ function update(){
       }
     }
 
-    // clamp inside level
     player.x = clamp(player.x, 0, levelWidth - player.width);
 
     // shooting
@@ -227,7 +227,7 @@ function update(){
       player.ammo--; shootCooldown = shootRate;
     }
 
-    // reload on press (start)
+    // reload
     if(keys['r'] && !player.isReloading && player.mags > 0 && player.ammo < 15){
       player.isReloading = true; player.reloadTimer = reloadFrames;
     }
@@ -239,7 +239,6 @@ function update(){
     // interact E - once per press
     if(keys['e']){
       if(!keys._ePrev){
-        // attempt pickups
         for(const c of crates){
           if(!c.taken && Math.abs((c.x + c.w/2) - (player.x + player.width/2)) < 40 && Math.abs(c.y - player.y) < 50){
             c.taken = true; player.mags = clamp(player.mags + 1, 0, 99);
@@ -254,69 +253,50 @@ function update(){
     for(let i=bullets.length-1;i>=0;i--){
       const b = bullets[i];
       b.x += b.vx;
-      // collide with enemies
       for(const en of enemies){
         if(!en.alive) continue;
         const br = {x:b.x,y:b.y,width:10,height:4};
         const er = {x:en.x,y:en.y,width:en.width,height:en.height};
         if(rectsOverlap(br,er)){
           en.hp--; bullets.splice(i,1);
-          en.vx = 0; // stun a bit
+          en.vx = 0;
           if(en.hp <= 0) en.alive = false;
           break;
         }
       }
-      // offscreen removal relative to camera bounds to be generous
       if(i < bullets.length && (b.x < cameraX - 100 || b.x > cameraX + canvas.width + 100)) bullets.splice(i,1);
     }
 
     // ENEMY AI with parkour/jumping
     for(const en of enemies){
       if(!en.alive) continue;
-
-      // basic ground base y
-      en.y = 420; // keep simple baseline
-
-      // compute horizontal distance
+      en.y = 420;
       const dx = player.x - en.x;
       const dist = Math.abs(dx);
-
-      // find nearest platform indices for enemy and player
       const enPlat = findPlatformUnder(en.x, en.y+en.height);
       const plPlat = findPlatformUnder(player.x, player.y+player.height);
-
-      // If enemy can see player on same platform or ground and is near, move
-      // If player is on higher platform and within limited horizontal range, attempt parkour: find path to platform
       en.targetPlatformIndex = null;
 
-      // If player is above by a reasonable amount and within horizontal reach, try jump to their platform
       if(plPlat !== -1 && enPlat !== -1 && plPlat !== enPlat){
         if(canEnemyJumpFromTo(en, enPlat, plPlat)){
-          // try to move toward edge to jump (very simple)
-          const targetCenter = platforms[plPlat].x + platforms[plPlat].width/2;
-          // move toward player's x to align, then attempt jump when close enough
           if(Math.abs(player.x - en.x) > en.attackRange){
             en.vx = Math.sign(dx) * en.speed;
             en.x += en.vx;
           } else {
-            // attempt "jump": small upward impulse and forward move
             if(en.jumpTimer <= 0){
-              en.jumpTimer = 30; // frames in jump state
-              en.vy = -12; // enemy jump (not simulated vertical with collisions for simplicity)
+              en.jumpTimer = 30;
+              en.vy = -12;
             }
           }
         } else {
-          // cannot jump to player's platform: walk toward player on ground
           if(dist > en.attackRange) { en.vx = Math.sign(dx) * en.speed; en.x += en.vx; }
           else { en.vx = 0; }
         }
       } else {
-        // same platform or no platform info: simple approach
         if(dist > en.attackRange) { en.vx = Math.sign(dx) * en.speed; en.x += en.vx; }
         else { en.vx = 0; }
       }
 
-      // attack if close AND vertically near (prevent hitting player on higher platform unless enemy reached)
       const verticalDelta = Math.abs(en.y - player.y);
       if(dist <= en.attackRange + 8 && verticalDelta < 40){
         if(en.attackCooldown <= 0){
@@ -325,28 +305,19 @@ function update(){
       }
 
       if(en.attackCooldown > 0) en.attackCooldown--;
-      if(en.jumpTimer > 0) {
-        // simulate small forward movement when in jump mode
-        en.jumpTimer--;
-        en.x += Math.sign(dx) * (en.speed * 1.6);
-      }
-
-      // clamp enemy inside level
+      if(en.jumpTimer > 0) { en.jumpTimer--; en.x += Math.sign(dx) * (en.speed * 1.6); }
       en.x = clamp(en.x, 0, levelWidth - en.width);
     }
 
-    // death check
+    // death
     if(player.hp <= 0){
       player.hp = 0; gameState = 'gameover'; fadeAlpha = 0; showRetry=false;
     }
 
-    // camera follow
     cameraX = player.x - 220;
     cameraX = clamp(cameraX, 0, levelWidth - canvas.width);
     return;
   }
-
-  // no heavy updates for menus
 }
 
 // ---------- Draw ----------
@@ -354,27 +325,22 @@ function draw(){
   ctx.clearRect(0,0,canvas.width,canvas.height);
 
   if(gameState === 'menu'){
-    // background
     ctx.fillStyle = '#0f0f10'; ctx.fillRect(0,0,canvas.width,canvas.height);
-    // title
     ctx.fillStyle = '#f39c12'; ctx.font = '64px Impact'; ctx.textAlign='center';
     ctx.fillText('THE BADLANDS', canvas.width/2, 100);
     ctx.font = '14px Arial'; ctx.fillStyle='#bdc3c7';
     ctx.fillText('v0.4 — Demo', canvas.width/2, 132);
 
-    // buttons
     ctx.textAlign='left';
     for(const b of menuButtons){
       ctx.fillStyle = '#2c3e50'; ctx.fillRect(b.x, b.y, b.w, b.h);
       ctx.fillStyle = '#fff'; ctx.font = '20px Arial'; ctx.fillText(b.text, b.x + 36, b.y + 30);
     }
 
-    // unlocked/locked indicator
     ctx.textAlign='center'; ctx.font='18px Arial';
     ctx.fillStyle = unlocked ? '#2ecc71' : '#e74c3c';
     ctx.fillText(unlocked ? 'UNLOCKED' : 'LOCKED - Enter Key to Play', canvas.width/2, 220);
 
-    // footer credits centered
     ctx.fillStyle='#95a5a6'; ctx.font='12px Arial';
     ctx.fillText('Made by: Maroonstykl (General_brock14153 / mrmythrl)', canvas.width/2, canvas.height - 30);
     ctx.textAlign='left';
@@ -403,13 +369,11 @@ function draw(){
     return;
   }
 
-  // ---------- Gameplay draw ----------
-  // sky gradient
+  // Gameplay draw
   const grad = ctx.createLinearGradient(0,0,0,canvas.height);
   grad.addColorStop(0,'#87ceeb'); grad.addColorStop(1,'#bcdfff');
   ctx.fillStyle = grad; ctx.fillRect(0,0,canvas.width,canvas.height);
 
-  // mountains parallax
   mountains.forEach((m,i)=>{
     ctx.fillStyle = m.color;
     const step = 300;
@@ -422,7 +386,6 @@ function draw(){
     }
   });
 
-  // clouds
   clouds.forEach(c=>{
     const cx = c.x - cameraX*0.3;
     ctx.fillStyle = 'rgba(255,255,255,0.9)';
@@ -430,11 +393,9 @@ function draw(){
     c.x += c.speed; if(c.x - cameraX > levelWidth + 200) c.x = -200 + Math.random()*100;
   });
 
-  // platforms
   ctx.fillStyle = '#654321';
   platforms.forEach(p => ctx.fillRect(p.x - cameraX, p.y, p.width, p.height));
 
-  // crates
   for(const c of crates){
     if(c.taken) continue;
     const cx = c.x - cameraX;
@@ -447,33 +408,25 @@ function draw(){
     }
   }
 
-  // bullets
   ctx.fillStyle = 'yellow'; for(const b of bullets) ctx.fillRect(b.x - cameraX, b.y, 10, 4);
 
-  // enemies
   for(const en of enemies){
     if(!en.alive) continue;
     const ex = en.x - cameraX, ey = en.y;
-    // body
     ctx.fillStyle = '#2d3436'; ctx.fillRect(ex, ey, en.width, en.height);
-    // helmet/head
     ctx.fillStyle = '#b2bec3'; ctx.fillRect(ex + 4, ey - 10, en.width - 8, 8);
     ctx.fillStyle = '#2d3436'; ctx.fillRect(ex + 6, ey - 8, en.width - 12, 4);
-    // gun
     ctx.fillStyle = '#1b1b1b';
     if(en.x < player.x) ctx.fillRect(ex + en.width, ey + 18, 14, 4);
     else ctx.fillRect(ex - 14, ey + 18, 14, 4);
-    // hp bar
     const hpW = (en.hp / 3) * en.width;
     ctx.fillStyle = 'red'; ctx.fillRect(ex, ey - 8, hpW, 4);
     ctx.strokeStyle = 'black'; ctx.strokeRect(ex, ey - 8, en.width, 4);
   }
 
-  // player
   ctx.fillStyle = player.colorBody; ctx.fillRect(player.x - cameraX, player.y + 10, player.width, player.height - 10);
   ctx.fillStyle = player.colorHead; ctx.fillRect(player.x - cameraX + 5, player.y, player.width - 10, 10);
 
-  // gun
   ctx.fillStyle = '#111';
   if(player.facing === 1){
     ctx.fillRect(player.x - cameraX + player.width, player.y + 20, 22, 6);
@@ -483,34 +436,29 @@ function draw(){
     ctx.fillRect(player.x - cameraX - 18, player.y + 26, 6, 10);
   }
 
-  // muzzle flash
   if(shootCooldown > shootRate - 4 && bullets.length > 0){
     ctx.fillStyle = 'rgba(255,215,0,0.9)';
     if(player.facing === 1) ctx.fillRect(player.x - cameraX + player.width + 22, player.y + 16, 12, 12);
     else ctx.fillRect(player.x - cameraX - 34, player.y + 16, 12, 12);
   }
 
-  // health bar top-left
   const hpX = 20, hpY = 20, hpW = 160;
   ctx.fillStyle = '#222'; ctx.fillRect(hpX - 2, hpY - 2, hpW + 4, 22);
   ctx.fillStyle = 'red'; ctx.fillRect(hpX, hpY, (player.hp / player.maxHp) * hpW, 18);
   ctx.strokeStyle = '#111'; ctx.strokeRect(hpX - 2, hpY - 2, hpW + 4, 22);
   ctx.fillStyle = 'white'; ctx.font='14px Arial'; ctx.fillText(`HP: ${player.hp} / ${player.maxHp}`, hpX + hpW + 10, hpY + 14);
 
-  // ammo/mags bottom-right (tidy)
   ctx.fillStyle = 'rgba(0,0,0,0.5)'; ctx.fillRect(canvas.width - 220, canvas.height - 44, 200, 36);
   ctx.fillStyle = 'white'; ctx.font = '16px Arial'; ctx.textAlign='right';
   ctx.fillText(`Ammo: ${player.ammo}   |   Mags: ${player.mags}`, canvas.width - 28, canvas.height - 18);
   ctx.textAlign='left';
 
-  // reload indicator
   if(player.isReloading){
     const pct = 1 - player.reloadTimer / reloadFrames;
     ctx.fillStyle = 'rgba(255,255,255,0.12)'; ctx.fillRect(canvas.width - 220, canvas.height - 44, 200 * pct, 36);
     ctx.fillStyle = 'white'; ctx.font='12px Arial'; ctx.fillText('Reloading...', canvas.width - 188, canvas.height - 22);
   }
 
-  // bottom hint
   ctx.fillStyle = '#ffffffcc'; ctx.font='12px Arial'; ctx.fillText('Press E to interact with crates. Press R to reload.', 20, canvas.height - 10);
 }
 
@@ -544,8 +492,7 @@ function loop(){
 loop();
 
 /* 
-  Notes / tuning:
-  - Enemy parkour is simplified: they attempt to jump to player's platform if horizontal distance within ~240 px and vertical isn't extremely high.
-  - Enemy won't "hit" player if player is safely high on an unreachable platform — they will try to get there if possible.
-  - Tweak enemy.speed, player speeds, and canEnemyJumpFromTo logic to change difficulty.
+  Notes:
+  - Added Buy Game Keys button in menu which opens the provided shop URL in a new tab.
+  - All core gameplay, UI, and key-unlock logic preserved.
 */
